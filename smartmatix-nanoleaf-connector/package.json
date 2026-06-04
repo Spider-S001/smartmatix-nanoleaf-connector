@@ -1,0 +1,31 @@
+{
+  "name": "smartmatix-nanoleaf-connector",
+  "version": "1.0.0",
+  "description": "Ein Plugin, um deine Nanoleaf-Geräte zur HCU hinzuzufügen.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "LOG_LEVEL=debug node src/index.js"
+  },
+  "keywords": [
+    "nanoleaf",
+    "nanoleaf essentials",
+    "nanoleaf lightstrip",
+    "nanoleaf floor lamp",
+    "smart light",
+    "connect-api",
+    "homematic",
+    "hcu",
+    "smarthome",
+    "light"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "uuid": "^11.1.0",
+    "ws": "^8.19.0"
+  }
+}
