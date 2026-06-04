@@ -159,7 +159,7 @@ class Plugin {
     // Update-Checker starten (täglich, sofort beim ersten Verbindungsaufbau)
     if (!this._updater) {
       this._updater = new HcuPluginUpdater(this._ws, this.pluginId);
-      this._updater.startSchedule('https://github.com/SmartMatix/smartmatix-nanoleaf-connector', 'SmartMatix Nanoleaf Connector');
+      this._updater.startSchedule('https://github.com/Spider-S001/smartmatix-nanoleaf-connector', 'SmartMatix Nanoleaf Connector');
     }
 
     // Pflicht beim Verbindungsaufbau: Plugin als READY melden
