@@ -43,6 +43,7 @@ Mit dem **SmartMatix Nanoleaf Connector** steuerst du deine Nanoleaf Matter WiFi
 | HCU-Firmware | ≥ 1.6.16 |
 | Nanoleaf-Gerät | Matter WiFi Essentials kompatibel |
 | Entwicklermodus | aktiviert (HCUweb) |
+| Port | 8742 |
 
 ---
 

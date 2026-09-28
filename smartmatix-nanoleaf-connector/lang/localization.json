@@ -8,6 +8,15 @@
     "group.discovery.manual.description": "Fallback: Falls die automatische Suche dein Gerät nicht findet, kannst du es hier über seine IP-Adresse hinzufügen.",
     "group.device.description":    "Nanoleaf-Gerät (Modell: {model})",
     "group.pending.description":   "Im LAN entdecktes Gerät (IP: {ip}). Trage den Auth-Token ein und aktiviere die Checkbox, um es hinzuzufügen.",
+
+    "group.backup_restore.name":        "Backup & Wiederherstellung",
+    "group.backup_restore.description": "Erstelle ein Backup deiner Plugin-Konfiguration oder stelle ein zuvor erstelltes Backup wieder her. Wähle eine Aktion aus und speichere die Einstellungen. Öffne die Einstellungen anschließend erneut, um den Download- bzw. Upload-Link zu erhalten.",
+    "settings.backup_restore.action.label":       "Aktion",
+    "settings.backup_restore.action.description": "Wähle 'Backup starten', um eine Sicherung herunterzuladen, oder 'Wiederherstellung starten', um ein Backup hochzuladen. Nach dem Speichern und erneuten Öffnen der Einstellungen erscheint hier der entsprechende Link.",
+    "settings.backup_restore.action.disabled":    "Deaktiviert",
+    "settings.backup_restore.action.backup":      "Backup starten",
+    "settings.backup_restore.action.restore":     "Wiederherstellung starten",
+
     "group.info.name":             "Informationen zum Plugin",
     "group.info.description":      "Weiterführende Informationen zum SmartMatix Nanoleaf Connector",
 
@@ -36,8 +45,8 @@
     "settings.manualip.description":     "Trage hier die IP-Adresse deines Nanoleaf-Geräts ein, falls die automatische Suche nicht funktioniert.",
     "settings.manualport.label":         "API-Port",
     "settings.manualport.description":   "Port der Nanoleaf REST API (Standard: 16021). Nur ändern wenn dein Gerät einen anderen Port verwendet.",
-    "settings.manualauthtoken.label":    "optional: Auth-Token (manuell)",
-    "settings.manualauthtoken.description": "Trage hier den Auth-Token deines Nanoleaf-Geräts ein, wenn du ihn bereits kennst. Alternativ: IP eintragen, Gerät in Kopplungsmodus versetzen und die Checkbox unten aktivieren.",
+    "settings.manualauthtoken.label":    "Alternativ: Auth-Token manuell eingeben",
+    "settings.manualauthtoken.description": "Trage hier den Auth-Token deines Nanoleaf-Geräts ein, wenn du ihn bereits kennst oder Probleme hast, dein Nanoleaf-Gerät zu authentifizieren.",
     "settings.manualauthtoken.request.label":       "Token automatisch anfordern (Kopplungsmodus)",
     "settings.manualauthtoken.request.description": "Versetze das Nanoleaf-Gerät zuerst in den Kopplungsmodus (Power-Taste 5–7 Sekunden halten bis die LEDs aufleuchten), trage die IP-Adresse ein und aktiviere dann diese Checkbox und speichere. Der Auth-Token wird automatisch abgerufen.",
     "settings.pending.token.description": "Gib den Auth-Token für dieses Gerät ein. Den Token erhältst du über die Nanoleaf-App: Geräteeinstellungen > Mit API verbinden.",
@@ -97,6 +106,15 @@
     "group.discovery.manual.description": "Fallback: If the automatic search does not find your device, you can add it here using its IP address.",
     "group.device.description":    "Nanoleaf Device (Model: {model})",
     "group.pending.description":   "Device discovered on the LAN (IP: {ip}). Enter the auth token and enable the checkbox to add it.",
+
+    "group.backup_restore.name":        "Backup & Restore",
+    "group.backup_restore.description": "Create a backup of your plugin configuration or restore a previously created backup. Select an action and save the settings. Then reopen the settings to get the download or upload link.",
+    "settings.backup_restore.action.label":       "Action",
+    "settings.backup_restore.action.description": "Select 'Start backup' to download a backup, or 'Start restore' to upload a backup. After saving and reopening the settings, the corresponding link will appear here.",
+    "settings.backup_restore.action.disabled":    "Disabled",
+    "settings.backup_restore.action.backup":      "Start backup",
+    "settings.backup_restore.action.restore":     "Start restore",
+
     "group.info.name":             "Plugin Information",
     "group.info.description":      "Additional information about the SmartMatix Nanoleaf Connector",
 
@@ -125,8 +143,8 @@
     "settings.manualip.description":     "Enter the IP address of your Nanoleaf device here if automatic discovery does not work.",
     "settings.manualport.label":         "API Port",
     "settings.manualport.description":   "Port of the Nanoleaf REST API (default: 16021). Only change this if your device uses a different port.",
-    "settings.manualauthtoken.label":    "optional: Auth Token (manual)",
-    "settings.manualauthtoken.description": "Enter the auth token of your Nanoleaf device here if you already know it. Alternatively: enter the IP, put the device into pairing mode and enable the checkbox below.",
+    "settings.manualauthtoken.label":    "Alternatively: Insert Auth Token manually",
+    "settings.manualauthtoken.description": "Enter the auth token of your Nanoleaf device here if you already know it or your are having trouble authenticating your Nanoleaf device.",
     "settings.manualauthtoken.request.label":       "Request token automatically (pairing mode)",
     "settings.manualauthtoken.request.description": "First put the Nanoleaf device into pairing mode (hold the power button for 5–7 seconds until the LEDs light up), enter the IP address, then enable this checkbox and save. The auth token will be retrieved automatically.",
     "settings.pending.token.description": "Enter the auth token for this device. Get it from the Nanoleaf app: Device Settings > Connect to API.",

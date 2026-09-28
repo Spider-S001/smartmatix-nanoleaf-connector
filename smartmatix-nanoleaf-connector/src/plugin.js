@@ -419,13 +419,21 @@ class Plugin {
     log.info('CONFIG_UPDATE_REQUEST empfangen');
 
     // --- Backup / Restore ---
-    // Felder backupMode / restoreMode aus dem properties-Objekt extrahieren
-    // und an den backupManager weitergeben.
-    // Die HCU schickt Felder mit Präfix (z.B. 'backup_data_backupMode').
-    // Der backupManager erwartet normalisierte Felder ('backupMode', 'restoreMode').
+    // Die zusammengefasste Gruppe nutzt ein Dropdown (backup_restore_action)
+    // mit den lokalisierten Werten "Deaktiviert" / "Backup starten" /
+    // "Wiederherstellung starten". Wir matchen den gewählten Anzeigetext
+    // gegen die Lokalisierung und übersetzen ihn in die backupMode/restoreMode-
+    // Felder die der backupManager erwartet.
+    const lang        = this._lang;
+    const actionValue = properties?.backup_restore_action;
     const backupFields = {};
-    if (properties?.backup_data_backupMode  === true || properties?.backup_data_backupMode  === 'true') backupFields.backupMode  = true;
-    if (properties?.restore_data_restoreMode === true || properties?.restore_data_restoreMode === 'true') backupFields.restoreMode = true;
+    if (actionValue !== undefined && actionValue !== null) {
+      if (actionValue === t(lang, 'settings.backup_restore.action.backup')) {
+        backupFields.backupMode = true;
+      } else if (actionValue === t(lang, 'settings.backup_restore.action.restore')) {
+        backupFields.restoreMode = true;
+      }
+    }
     if (this._backupManager.handleConfigUpdate(backupFields)) {
       // Update wurde vom Backup-Manager verarbeitet – Einstellungsseite neu pushen
       // und Antwort sofort senden (kein weiterer Handler nötig).
@@ -737,25 +745,41 @@ class Plugin {
       };
     });
 
-    // --- Backup & Restore ---
+    // --- Backup & Restore (zu EINER Gruppe zusammengefasst) ---
     const backupConfigGroups = this._backupManager.getConfigGroups();
+    const safeLang   = lang || 'de';
     const backupHost = this._backupHost;
-    const safeLang = lang || 'de';
     const resolveDesc = (desc) => {
       const raw = (typeof desc === 'object' ? desc?.[lang] : desc) ?? '';
       return raw
         .replace(/\{\{hostname\}\}/g, backupHost)
         .replace(/\{\{lang\}\}/g, lang ?? 'en');
     };
-    groups.backup_data = {
-      friendlyName: backupConfigGroups[0].label?.[safeLang] ?? '',
-      description:  resolveDesc(backupConfigGroups[0].description),
+
+    // Aktiven Modus ermitteln: Liefert getConfigGroups() für eine Gruppe
+    // andere Felder als die Standard-Checkbox, läuft dieser Modus gerade.
+    const backupGroup   = backupConfigGroups[0];
+    const restoreGroup  = backupConfigGroups[1];
+    const backupActive  = backupGroup.fields.some(f => f.type !== 'BOOLEAN');
+    const restoreActive = restoreGroup.fields.some(f => f.type !== 'BOOLEAN');
+
+    // Beschreibung der zusammengefassten Gruppe je nach Zustand:
+    //   - Backup aktiv  > Backup-Schritt-2-Beschreibung
+    //   - Restore aktiv > Restore-Schritt-2-Beschreibung
+    //   - sonst         > allgemeine Auswahl-Beschreibung aus localization.json
+    let combinedDesc;
+    if (backupActive) {
+      combinedDesc = resolveDesc(backupGroup.description);
+    } else if (restoreActive) {
+      combinedDesc = resolveDesc(restoreGroup.description);
+    } else {
+      combinedDesc = t(lang, 'group.backup_restore.description');
+    }
+
+    groups.backup_restore = {
+      friendlyName: t(lang, 'group.backup_restore.name'),
+      description:  combinedDesc,
       order:        997,
-    };
-    groups.restore_data = {
-      friendlyName: backupConfigGroups[1].label?.[safeLang] ?? '',
-      description:  resolveDesc(backupConfigGroups[1].description),
-      order:        998,
     };
 
     // --- Plugin-Infos ---
@@ -943,45 +967,71 @@ class Plugin {
       };
     });
 
-    // --- Backup & Restore ---
-    // LABEL-Felder werden als description der Gruppe gerendert (kein eigenes Property).
+    // --- Backup & Restore (eine Gruppe, Dropdown-Steuerung) ---
     const backupConfigGroups = this._backupManager.getConfigGroups();
     const backupHost = this._backupHost;
+    const safeLang   = lang || 'de';
 
-    const safeLang = lang || 'de';
-    const mapBackupField = (field, i, groupId) => {
-      if (field.type === 'LABEL') return;
-      if (field.type === 'LINK') {
-        const resolvedUrl = (field.url ?? '')
-          .replace('{{hostname}}', backupHost)
-          .replace('{{lang}}', safeLang);
-        properties[`${groupId}_${field.id}`] = {
-          friendlyName: field.buttonLabel?.[safeLang] ?? field.label?.[safeLang] ?? '',
-          description:  field.label?.[safeLang] ?? '',
-          dataType:     'WEBLINK',
-          groupId,
-          order:        i + 1,
-          defaultValue: field.buttonLabel?.[safeLang] ?? field.label?.[safeLang] ?? '',
-          currentValue: resolvedUrl,
+    const backupGroup   = backupConfigGroups[0];
+    const restoreGroup  = backupConfigGroups[1];
+    const backupActive  = backupGroup.fields.some(f => f.type !== 'BOOLEAN');
+    const restoreActive = restoreGroup.fields.some(f => f.type !== 'BOOLEAN');
+
+    if (backupActive || restoreActive) {
+      // Ein Modus läuft: die aktiven Felder (Token, Link) dieser Gruppe anzeigen.
+      const activeFields = backupActive ? backupGroup.fields : restoreGroup.fields;
+
+      activeFields.forEach((field, i) => {
+        if (field.type === 'LABEL') return;
+
+        if (field.type === 'LINK') {
+          const resolvedUrl = (field.url ?? '')
+            .replace('{{hostname}}', backupHost)
+            .replace('{{lang}}', safeLang);
+          properties[`backup_restore_${field.id}`] = {
+            friendlyName: field.buttonLabel?.[safeLang] ?? field.label?.[safeLang] ?? '',
+            description:  field.label?.[safeLang] ?? '',
+            dataType:     'WEBLINK',
+            groupId:      'backup_restore',
+            order:        i + 2,
+            defaultValue: field.buttonLabel?.[safeLang] ?? field.label?.[safeLang] ?? '',
+            currentValue: resolvedUrl,
+          };
+          return;
+        }
+
+        // STRING-Feld (z.B. Restore-Token, readOnly)
+        const resolvedValue = field.readOnly
+          ? (field.value ?? '').replace('{{hostname}}', backupHost).replace('{{lang}}', lang ?? 'en')
+          : (field.value ?? '');
+        properties[`backup_restore_${field.id}`] = {
+          friendlyName: field.label?.[safeLang] ?? '',
+          description:  '',
+          dataType:     'STRING',
+          groupId:      'backup_restore',
+          order:        i + 2,
+          defaultValue: resolvedValue,
+          currentValue: resolvedValue,
+          ...(field.readOnly ? { readOnly: true } : {}),
         };
-        return;
-      }
-      const resolvedValue = field.readOnly
-        ? (field.value ?? '').replace('{{hostname}}', backupHost).replace('{{lang}}', lang ?? 'en')
-        : (field.value ?? false);
-      properties[`${groupId}_${field.id}`] = {
-        friendlyName: field.label?.[safeLang] ?? '',
-        description:  '',
-        dataType:     field.type === 'BOOLEAN' ? 'BOOLEAN' : 'STRING',
-        groupId,
-        order:        i + 1,
-        defaultValue: resolvedValue,
-        currentValue: resolvedValue,
-        ...(field.readOnly ? { readOnly: true } : {}),
+      });
+    } else {
+      // Kein Modus aktiv: Dropdown zur Auswahl der Aktion.
+      properties.backup_restore_action = {
+        friendlyName: t(lang, 'settings.backup_restore.action.label'),
+        description:  t(lang, 'settings.backup_restore.action.description'),
+        dataType:     'ENUM',
+        groupId:      'backup_restore',
+        order:        1,
+        defaultValue: t(lang, 'settings.backup_restore.action.disabled'),
+        currentValue: t(lang, 'settings.backup_restore.action.disabled'),
+        values: [
+          t(lang, 'settings.backup_restore.action.disabled'),
+          t(lang, 'settings.backup_restore.action.backup'),
+          t(lang, 'settings.backup_restore.action.restore'),
+        ],
       };
-    };
-    backupConfigGroups[0].fields.forEach((f, i) => mapBackupField(f, i, 'backup_data'));
-    backupConfigGroups[1].fields.forEach((f, i) => mapBackupField(f, i, 'restore_data'));
+    }
 
     // --- Info ---
     properties.copyrightInfo = {
@@ -1056,6 +1106,14 @@ class Plugin {
         }
       }
 
+      // Bei ausgeschaltetem Gerät nur switchState senden (vgl. _pollAllDevices).
+      // Sonst kann die HCU brightness/color-Werte als implizites "Gerät ist an"
+      // interpretieren und das Gerät wieder einschalten.
+      const switchFeat = featuresToSend.find(f => f.type === 'switchState');
+      if (switchFeat && switchFeat.on === false) {
+        featuresToSend = [switchFeat];
+      }
+
       this._send({
         id:       uuidv4(),
         pluginId: this.pluginId,
@@ -1121,6 +1179,18 @@ class Plugin {
 
       if (!liveFeatures) continue;
 
+      // Wenn das Gerät ausgeschaltet ist, geben einige Nanoleaf-Firmware-
+      // Versionen für brightness/hue/sat/ct trotzdem aktive Werte zurück
+      // (z.B. den zuletzt gespeicherten Wert oder Default-Werte). Wenn wir
+      // diese als STATUS_EVENT senden, kann die HCU sie fälschlicherweise
+      // als implizites "Gerät ist an" interpretieren und das Gerät wieder
+      // einschalten. Deshalb filtern wir bei ausgeschaltetem Gerät alle
+      // Features außer switchState heraus.
+      const switchFeat = liveFeatures.find(f => f.type === 'switchState');
+      if (switchFeat && switchFeat.on === false) {
+        liveFeatures = [switchFeat];
+      }
+
       // Änderungen gegenüber gespeichertem Zustand ermitteln
       const changed = this._detectChanges(hcuDevice.features, liveFeatures);
       if (!changed) {
@@ -1128,7 +1198,7 @@ class Plugin {
         continue;
       }
 
-      log.info(`Poll: Statusaenderung erkannt bei ${nl.name} (${nl.ip}) – sende STATUS_EVENT.`);
+      log.info(`Poll: Statusaenderung erkannt bei ${nl.name} (${nl.ip}) > sende STATUS_EVENT.`);
 
       // In-Memory + Datei aktualisieren
       this._mergeAndPersist(hcuDevice, liveFeatures);

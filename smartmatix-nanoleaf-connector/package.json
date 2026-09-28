@@ -1,6 +1,6 @@
 {
   "name": "smartmatix-nanoleaf-connector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ein Plugin, um deine Nanoleaf-Geräte zur HCU hinzuzufügen.",
   "main": "src/index.js",
   "scripts": {
