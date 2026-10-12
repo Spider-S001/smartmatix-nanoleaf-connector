@@ -27,7 +27,6 @@ Mit dem **SmartMatix Nanoleaf Connector** steuerst du deine Nanoleaf Matter WiFi
 - **Persistenz** – alle Geräte und Konfigurationsdaten werden in `/data` gespeichert und überleben Plugin-Updates und Neustarts
 - **Automatische Wiederverbindung** – Exponential Backoff bei Verbindungsabbruch zur HCU
 - **Backup & Restore** – alle Plugin-Daten lassen sich als JSON-Datei exportieren und wiederherstellen
-- **Automatische Updates** – der Plugin-Updater prüft regelmäßig auf neue Versionen
 
 ![Die Einrichtung des Plugins](/Screenshots/Konfiguration-Plugin-Nanoleaf-Connector.jpg "Konfigurationsmöglichkeiten im Nanoleaf Plugin")
 
@@ -70,7 +69,6 @@ smartmatix-nanoleaf-connector/
     ├── devicesStore.js               ← Persistenz für Geräte & Nanoleaf-Daten
     ├── configStore.js                ← Persistenz für Konfiguration
     ├── backup-plugin-data.js         ← Backup & Restore Bibliothek
-    ├── hcu-plugin-updater.js         ← Automatischer Update-Check
     ├── localization.js               ← Übersetzungen ausgeben
     ├── logger.js                     ← Konsolenlogger
     └── notifications.js              ← HCU-Benachrichtigungen

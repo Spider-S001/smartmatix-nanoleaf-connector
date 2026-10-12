@@ -38,7 +38,6 @@ const devicesStore   = require('./devicesStore');
 const nanoleaf       = require('./nanoleaf.js');
 const { t }          = require('./localization');
 const { createNotifier }    = require('./notifications');
-const { HcuPluginUpdater }  = require('./hcu-plugin-updater');
 const backup                = require('./backup-plugin-data');
 
 // ---------------------------------------------------------------------------
@@ -92,7 +91,6 @@ class Plugin {
 
     // Notifier – wird nach _connect() über _send gespeist
     this._notify   = null;
-    this._updater  = null;
     this._backupManager = backup.create();
     try {
       const _sgtin = require('fs').readFileSync('/SGTIN', 'utf8').trim();
@@ -117,8 +115,6 @@ class Plugin {
     this._clearReconnect();
     this._stopPolling();
     this._stopScan();
-    // Stop Update Scheduler
-    this._updater?.stopSchedule();
     if (this._ws) {
       this._ws.terminate();
       this._ws = null;
@@ -155,12 +151,6 @@ class Plugin {
 
     // Notifier nach Verbindungsaufbau initialisieren
     this._notify = createNotifier(this.pluginId, (msg) => this._send(msg), t);
-
-    // Update-Checker starten (täglich, sofort beim ersten Verbindungsaufbau)
-    if (!this._updater) {
-      this._updater = new HcuPluginUpdater(this._ws, this.pluginId);
-      this._updater.startSchedule('https://github.com/Spider-S001/smartmatix-nanoleaf-connector', 'SmartMatix Nanoleaf Connector');
-    }
 
     // Pflicht beim Verbindungsaufbau: Plugin als READY melden
     this._sendPluginReady(uuidv4());
@@ -290,6 +280,12 @@ class Plugin {
       // Aktualisierten Zustand in devices.json persistieren
       const updatedDevice = devices.getById(deviceId);
       if (updatedDevice) {
+        // Farbmodus nachführen: Wer eine Farbe setzt, schaltet das Gerät in den
+        // Farbmodus, wer eine Farbtemperatur setzt, in den Weißmodus.
+        for (const f of features ?? []) {
+          if (f.type === 'color')            updatedDevice.colorMode = 'hs';
+          if (f.type === 'colorTemperature') updatedDevice.colorMode = 'ct';
+        }
         devicesStore.update('devices', deviceId, updatedDevice);
 
         // Asynchron an Nanoleaf-Gerät senden – CONTROL_RESPONSE nicht blockieren
@@ -344,28 +340,38 @@ class Plugin {
 
   /**
    * STATUS_REQUEST > aktuellen Gerätestatus liefern.
-   * Liest den Zustand direkt vom Nanoleaf-Gerät, wenn verfügbar.
+   *
+   * Laut Connect API 1.0.1 enthält der Body das OPTIONALE Array "deviceIds".
+   * Fehlt es (z.B. beim Öffnen der App), sind ALLE Geräte gemeint.
+   * Unbekannte IDs werden ignoriert.
+   *
+   * Geantwortet wird sofort mit dem gespeicherten Zustand; danach wird der
+   * Live-Zustand von den Nanoleaf-Geräten nachgeladen und bei Abweichung als
+   * STATUS_EVENT gemeldet.
    */
   _handleStatusRequest(message) {
-    const { deviceId } = message.body ?? {};
-    log.info(`STATUS_REQUEST fuer Geraet: ${deviceId}`);
+    const requestedIds = message.body?.deviceIds;
+    const allDevices   = devices.getAll();
 
-    const device  = devices.getById(deviceId);
-    const success = device != null;
+    const requested = Array.isArray(requestedIds) && requestedIds.length > 0
+      ? allDevices.filter(d => requestedIds.includes(d.deviceId))
+      : allDevices;
 
-    const response = {
+    log.info(`STATUS_REQUEST fuer ${Array.isArray(requestedIds) ? requestedIds.length : 'alle'} Geraet(e) > ${requested.length} gefunden.`);
+
+    this._send({
       id:       message.id,
       pluginId: this.pluginId,
       type:     'STATUS_RESPONSE',
       body: {
-        success,
-        devices: success ? [device] : [],
+        success: true,
+        devices: requested.map(d => this._statusDevice(d)),
       },
-    };
-    this._send(response);
+    });
 
-    // Aktuellen Zustand vom Nanoleaf nachladen und als STATUS_EVENT senden
-    if (success && device.nanoleafId) {
+    // Aktuellen Zustand von den Nanoleaf-Geräten nachladen
+    for (const device of requested) {
+      if (!device.nanoleafId) continue;
       this._refreshNanoleafState(device).catch(err => {
         log.debug(`STATUS_REQUEST Nanoleaf-Refresh fehlgeschlagen: ${err.message}`);
       });
@@ -1073,7 +1079,7 @@ class Plugin {
         type:     'STATUS_EVENT',
         body: {
           deviceId: device.deviceId,
-          features: device.features,
+          features: this._statusFeatures(device.features, this._storedColorMode(device)),
         },
       });
     });
@@ -1092,13 +1098,10 @@ class Plugin {
     for (const hcuDevice of allDevices) {
       const nl = nanoleafDevices.find(d => d.id === hcuDevice.nanoleafId);
 
-      let featuresToSend = hcuDevice.features; // Fallback: persistierter Zustand
-
       if (nl?.authToken) {
         const liveFeatures = await nanoleaf.getStateAsFeatures(nl.ip, nl.port, nl.authToken);
         if (liveFeatures) {
-          featuresToSend = liveFeatures;
-          // Persistieren
+          // Persistieren (inkl. aktivem Farbmodus)
           this._mergeAndPersist(hcuDevice, liveFeatures);
           log.info(`_fetchAllAndSendStatusEvents: Echter Zustand von ${nl.name} (${nl.ip}) geladen.`);
         } else {
@@ -1106,13 +1109,9 @@ class Plugin {
         }
       }
 
-      // Bei ausgeschaltetem Gerät nur switchState senden (vgl. _pollAllDevices).
-      // Sonst kann die HCU brightness/color-Werte als implizites "Gerät ist an"
-      // interpretieren und das Gerät wieder einschalten.
-      const switchFeat = featuresToSend.find(f => f.type === 'switchState');
-      if (switchFeat && switchFeat.on === false) {
-        featuresToSend = [switchFeat];
-      }
+      // Gespeicherter (ggf. gerade aktualisierter) Zustand, aufbereitet für
+      // die HCU: bei "aus" nur switchState, sonst nur das aktive Farb-Feature.
+      const featuresToSend = this._statusFeatures(hcuDevice.features, this._storedColorMode(hcuDevice));
 
       this._send({
         id:       uuidv4(),
@@ -1179,20 +1178,16 @@ class Plugin {
 
       if (!liveFeatures) continue;
 
-      // Wenn das Gerät ausgeschaltet ist, geben einige Nanoleaf-Firmware-
-      // Versionen für brightness/hue/sat/ct trotzdem aktive Werte zurück
-      // (z.B. den zuletzt gespeicherten Wert oder Default-Werte). Wenn wir
-      // diese als STATUS_EVENT senden, kann die HCU sie fälschlicherweise
-      // als implizites "Gerät ist an" interpretieren und das Gerät wieder
-      // einschalten. Deshalb filtern wir bei ausgeschaltetem Gerät alle
-      // Features außer switchState heraus.
-      const switchFeat = liveFeatures.find(f => f.type === 'switchState');
-      if (switchFeat && switchFeat.on === false) {
-        liveFeatures = [switchFeat];
-      }
+      // Für die HCU aufbereiten: bei "aus" nur switchState (sonst kann die HCU
+      // brightness/color als implizites "an" deuten), sonst nur das aktive
+      // Farb-Feature (color ODER colorTemperature, nie beide).
+      const liveMode       = this._colorModeOf(liveFeatures);
+      const featuresToSend = this._statusFeatures(liveFeatures, liveMode);
 
-      // Änderungen gegenüber gespeichertem Zustand ermitteln
-      const changed = this._detectChanges(hcuDevice.features, liveFeatures);
+      // Änderungen gegenüber gespeichertem Zustand ermitteln – ein Wechsel des
+      // Farbmodus (Farbe <> Weiß) zählt auch dann, wenn die Werte gleich sind.
+      const modeChanged = liveMode !== this._storedColorMode(hcuDevice);
+      const changed     = modeChanged || this._detectChanges(hcuDevice.features, featuresToSend);
       if (!changed) {
         log.debug(`Poll: Kein Statuswechsel bei ${nl.name}.`);
         continue;
@@ -1207,7 +1202,7 @@ class Plugin {
         id:       uuidv4(),
         pluginId: this.pluginId,
         type:     'STATUS_EVENT',
-        body:     { deviceId: hcuDevice.deviceId, features: liveFeatures },
+        body:     { deviceId: hcuDevice.deviceId, features: featuresToSend },
       });
     }
   }
@@ -1258,7 +1253,78 @@ class Plugin {
         Object.assign(existing, incoming);
       }
     }
+    // Aktiven Farbmodus merken – bestimmt, welches Farb-Feature gemeldet wird.
+    hcuDevice.colorMode = this._colorModeOf(liveFeatures);
     devicesStore.update('devices', hcuDevice.deviceId, hcuDevice);
+  }
+
+  /**
+   * Leitet den Farbmodus aus einem Live-Feature-Array ab.
+   * getStateAsFeatures() liefert höchstens ein Farb-Feature (das aktive).
+   *
+   * @param {Array} features
+   * @returns {'hs'|'ct'|'effect'}
+   */
+  _colorModeOf(features) {
+    if (features.some(f => f.type === 'color'))            return 'hs';
+    if (features.some(f => f.type === 'colorTemperature')) return 'ct';
+    return 'effect';
+  }
+
+  /**
+   * Gespeicherter Farbmodus eines Geräts. Für Geräte aus älteren Versionen
+   * (ohne colorMode) wird er aus der gespeicherten Sättigung geschätzt.
+   *
+   * @param {object} device – HCU-Geräteobjekt
+   * @returns {'hs'|'ct'|'effect'}
+   */
+  _storedColorMode(device) {
+    if (device?.colorMode) return device.colorMode;
+    const color = device?.features?.find(f => f.type === 'color');
+    return (color?.saturationLevel ?? 0) > 0 ? 'hs' : 'ct';
+  }
+
+  /**
+   * Bereitet Features für Status-Meldungen an die HCU auf
+   * (STATUS_EVENT und STATUS_RESPONSE):
+   *   - Gerät aus: nur switchState. Sonst kann die HCU brightness/color als
+   *     implizites "Gerät ist an" deuten und es wieder einschalten.
+   *   - Gerät an: nur das aktive Farb-Feature. Meldet man color UND
+   *     colorTemperature gleichzeitig, zeigt die Homematic IP App einen falschen
+   *     Zustand an (Weiß statt Farbe bzw. wechselnde Anzeige zwischen Lampen).
+   *     Bei Szenen ("effect") wird keines der beiden gemeldet.
+   *
+   * @param {Array}  features
+   * @param {string} colorMode – 'hs' | 'ct' | 'effect'
+   * @returns {Array}
+   */
+  _statusFeatures(features, colorMode) {
+    const sw = features.find(f => f.type === 'switchState');
+    if (sw && sw.on === false) return [sw];
+    return features.filter(f => {
+      if (f.type === 'color')            return colorMode === 'hs';
+      if (f.type === 'colorTemperature') return colorMode === 'ct';
+      return true;
+    });
+  }
+
+  /**
+   * Erstellt das Device-Objekt für eine STATUS_RESPONSE: nur die laut Connect
+   * API definierten Felder (keine internen wie nanoleafId/alreadyIncluded)
+   * und aufbereitete Features.
+   *
+   * @param {object} device – HCU-Geräteobjekt
+   * @returns {object}
+   */
+  _statusDevice(device) {
+    return {
+      deviceId:        device.deviceId,
+      deviceType:      device.deviceType,
+      modelType:       device.modelType,
+      firmwareVersion: device.firmwareVersion,
+      friendlyName:    device.friendlyName,
+      features:        this._statusFeatures(device.features, this._storedColorMode(device)),
+    };
   }
 
   /**
@@ -1272,18 +1338,29 @@ class Plugin {
     const nl = nanoleafDevices.find(d => d.id === hcuDevice.nanoleafId);
     if (!nl?.authToken) return;
 
-    const features = await nanoleaf.getStateAsFeatures(nl.ip, nl.port, nl.authToken);
-    if (!features) return;
+    const liveFeatures = await nanoleaf.getStateAsFeatures(nl.ip, nl.port, nl.authToken);
+    if (!liveFeatures) return;
+
+    const device = devices.getById(hcuDevice.deviceId);
+    if (!device) return;
+
+    const liveMode       = this._colorModeOf(liveFeatures);
+    const featuresToSend = this._statusFeatures(liveFeatures, liveMode);
+
+    // Die STATUS_RESPONSE enthielt bereits den gespeicherten Zustand –
+    // ein STATUS_EVENT ist nur nötig, wenn das Gerät davon abweicht.
+    const changed = liveMode !== this._storedColorMode(device)
+      || this._detectChanges(device.features, featuresToSend);
+    if (!changed) return;
 
     // Persistieren und In-Memory aktualisieren
-    const device = devices.getById(hcuDevice.deviceId);
-    if (device) this._mergeAndPersist(device, features);
+    this._mergeAndPersist(device, liveFeatures);
 
     this._send({
       id:       uuidv4(),
       pluginId: this.pluginId,
       type:     'STATUS_EVENT',
-      body:     { deviceId: hcuDevice.deviceId, features },
+      body:     { deviceId: hcuDevice.deviceId, features: featuresToSend },
     });
   }
 

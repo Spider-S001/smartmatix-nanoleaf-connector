@@ -235,8 +235,24 @@ function featuresToNanoleafState(features) {
 }
 
 /**
+ * Ermittelt den aktiven Farbmodus eines Nanoleaf-Zustands.
+ * Die API liefert state.colorMode ("hs", "ct" oder "effect"). Fehlt das Feld
+ * (ältere Firmware), wird aus der Sättigung geschätzt: Sättigung > 0 = Farbe.
+ *
+ * @param {object} s – state-Objekt aus GET /api/v1/<token>/
+ * @returns {'hs'|'ct'|'effect'}
+ */
+function resolveColorMode(s) {
+  const mode = s?.colorMode;
+  if (mode === 'hs' || mode === 'ct' || mode === 'effect') return mode;
+  return (s?.sat?.value ?? 0) > 0 ? 'hs' : 'ct';
+}
+
+/**
  * Liest den aktuellen Zustand vom Nanoleaf und konvertiert ihn in HCU-Features
  * (Connect API 1.0.1 konforme Typen und Feldnamen).
+ * Enthält höchstens EIN Farb-Feature (color ODER colorTemperature), passend
+ * zum aktiven Farbmodus des Geräts.
  *
  * @param {string} ip        – IP-Adresse
  * @param {number} port      – API-Port
@@ -259,7 +275,14 @@ async function getStateAsFeatures(ip, port, authToken) {
     features.push({ type: 'dimming', dimLevel: (s.brightness.value ?? 100) / 100 });
   }
 
-  if (s.hue !== undefined || s.sat !== undefined) {
+  // Nur das gerade AKTIVE Farb-Feature melden. Die Nanoleaf-API liefert hue/sat
+  // und ct immer gleichzeitig, aktiv ist aber nur eines davon (colorMode).
+  // Meldet man beide, zeigt die Homematic IP App einen falschen Zustand an
+  // (z.B. Weiß statt der eingestellten Farbe). Bei colorMode "effect" (Szene)
+  // ist keiner der beiden Werte aussagekräftig – dann wird keiner gemeldet.
+  const colorMode = resolveColorMode(s);
+
+  if (colorMode === 'hs' && (s.hue !== undefined || s.sat !== undefined)) {
     // Nanoleaf: hue 0–360, sat 0–100 > HCU: hue 0–360, saturationLevel 0.0–1.0
     features.push({
       type:           'color',
@@ -268,7 +291,7 @@ async function getStateAsFeatures(ip, port, authToken) {
     });
   }
 
-  if (s.ct !== undefined) {
+  if (colorMode === 'ct' && s.ct !== undefined) {
     // WICHTIG! Nanoleaf liefert nicht nur den aktuellen Wert, sondern auch die
     // gerätespezifischen Grenzen mit (min/max in Kelvin) > müssen
     // bei JEDEM Status-Update mitgesendet werden, sonst skaliert die
