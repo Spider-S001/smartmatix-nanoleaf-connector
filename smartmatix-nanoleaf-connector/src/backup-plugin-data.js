@@ -59,7 +59,7 @@ function getTlsCredentials() {
 }
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 Minuten
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
-const DEFAULT_PORT   = 8743;
+const DEFAULT_PORT   = 8742;
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 

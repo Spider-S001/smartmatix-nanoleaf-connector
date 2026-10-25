@@ -13,8 +13,9 @@
  *
  * Verbindungsablauf (Connect API 1.0.1):
  *   1. WebSocket-Verbindung aufbauen (Header: authtoken, plugin-id)
- *   2. Bei „open": sofort PLUGIN_STATE_RESPONSE { READY } senden
- *   3. Auf PLUGIN_STATE_REQUEST  > erneut PLUGIN_STATE_RESPONSE { READY }
+ *   2. Bei „open": sofort PLUGIN_STATE_RESPONSE senden
+ *      (READY, oder CONFIG_REQUIRED solange noch kein Gerät eingerichtet ist)
+ *   3. Auf PLUGIN_STATE_REQUEST  > erneut PLUGIN_STATE_RESPONSE
  *   4. Auf DISCOVER_REQUEST      > DISCOVER_RESPONSE mit Geräteliste
  *   5. Auf CONTROL_REQUEST       > Nanoleaf steuern + CONTROL_RESPONSE
  *   6. Auf CONFIG_TEMPLATE_REQUEST > Einstellungsseite generieren
@@ -152,8 +153,9 @@ class Plugin {
     // Notifier nach Verbindungsaufbau initialisieren
     this._notify = createNotifier(this.pluginId, (msg) => this._send(msg), t);
 
-    // Pflicht beim Verbindungsaufbau: Plugin als READY melden
-    this._sendPluginReady(uuidv4());
+    // Pflicht beim Verbindungsaufbau: Plugin-Status melden
+    // (READY bzw. CONFIG_REQUIRED, solange noch kein Gerät eingerichtet ist)
+    this._sendPluginState(uuidv4());
 
     // Zuerst echte Zustände von allen Nanoleaf-Geräten holen,
     // dann STATUS_EVENTs an die HCU senden
@@ -182,7 +184,7 @@ class Plugin {
     switch (message.type) {
       case 'PLUGIN_STATE_REQUEST':
         // HCU fragt regelmäßig nach dem Plugin-Status
-        this._sendPluginReady(message.id);
+        this._sendPluginState(message.id);
         break;
       case 'DISCOVER_REQUEST':
         // HCU möchte wissen, welche Geräte das Plugin verwaltet
@@ -237,19 +239,27 @@ class Plugin {
   }
 
   /**
-   * PLUGIN_STATE_RESPONSE – teilt der HCU mit, dass das Plugin betriebsbereit ist.
-   * Muss beim Verbindungsaufbau und auf jeden PLUGIN_STATE_REQUEST gesendet werden.
+   * PLUGIN_STATE_RESPONSE – teilt der HCU den Plugin-Status mit.
+   * Muss beim Verbindungsaufbau, auf jeden PLUGIN_STATE_REQUEST und bei jeder
+   * Statusänderung gesendet werden (Connect API 1.0.1).
+   *
+   * Status (PluginReadinessStatus):
+   *   CONFIG_REQUIRED – noch kein Nanoleaf-Gerät eingerichtet (weder per Suche
+   *                     noch manuell). Die HCU fordert den Nutzer dann auf,
+   *                     das Plugin über HCUweb zu konfigurieren.
+   *   READY           – mindestens ein Gerät eingerichtet.
    */
-  _sendPluginReady(messageId) {
+  _sendPluginState(messageId) {
+    const status = nanoleaf.loadNanoleafDevices().length > 0 ? 'READY' : 'CONFIG_REQUIRED';
     const message = {
       id:       messageId,
       pluginId: this.pluginId,
       type:     'PLUGIN_STATE_RESPONSE',
       body: {
-        pluginReadinessStatus: 'READY',
+        pluginReadinessStatus: status,
       },
     };
-    log.info('Sende PLUGIN_STATE_RESPONSE { READY }');
+    log.info(`Sende PLUGIN_STATE_RESPONSE { ${status} }`);
     this._send(message);
   }
 
@@ -560,9 +570,11 @@ class Plugin {
         if (nl.deviceId) {
           devicesStore.remove('devices', nl.deviceId);
           log.info(`HCU-Geraet ${nl.deviceId} aus devices.json entfernt.`);
-          devicesChanged = true;
         }
         nanoleaf.removeNanoleafDevice(nl.id);
+        // Immer als Änderung werten – u.a. damit nach dem Löschen des letzten
+        // Geräts der Status CONFIG_REQUIRED an die HCU gemeldet wird.
+        devicesChanged = true;
       }
     });
 
@@ -665,10 +677,13 @@ class Plugin {
    * Triggert einen neuen DISCOVER_REQUEST von der HCU.
    * Nur nötig wenn nach einem asynchronen Vorgang (z.B. manuelles Hinzufügen)
    * die HCU über neue Geräte informiert werden soll.
+   * Meldet dabei auch den aktuellen Plugin-Status: Nach dem ersten Gerät
+   * wechselt er von CONFIG_REQUIRED auf READY, nach dem Löschen des letzten
+   * Geräts zurück auf CONFIG_REQUIRED.
    */
   _triggerRediscover() {
-    log.info('Triggere DISCOVER_REQUEST via PLUGIN_STATE_RESPONSE READY ...');
-    this._sendPluginReady(uuidv4());
+    log.info('Triggere DISCOVER_REQUEST via PLUGIN_STATE_RESPONSE ...');
+    this._sendPluginState(uuidv4());
   }
 
   /**
