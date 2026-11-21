@@ -2,12 +2,11 @@
   "de": {
     "group.general.name":          "Allgemein",
     "group.general.description":   "Allgemeine Plugin-Einstellungen",
-    "group.discovery.auto.name":          "Geräte automatisch hinzufügen",
-    "group.discovery.auto.description":   "Empfohlen: Suche nach Nanoleaf-Geräten im Netzwerk. Versetze deine Geräte vor dem Start in den Kopplungsmodus, damit sie automatisch eingebunden werden.",
     "group.discovery.manual.name":        "Geräte manuell hinzufügen",
     "group.discovery.manual.description": "Fallback: Falls die automatische Suche dein Gerät nicht findet, kannst du es hier über seine IP-Adresse hinzufügen.",
     "group.device.description":    "Nanoleaf-Gerät (Modell: {model})",
     "group.pending.description":   "Im LAN entdecktes Gerät (IP: {ip}). Trage den Auth-Token ein und aktiviere die Checkbox, um es hinzuzufügen.",
+    "group.pending.inactive":      "(inaktiv)",
 
     "group.backup_restore.name":        "Backup & Wiederherstellung",
     "group.backup_restore.description": "Erstelle ein Backup deiner Plugin-Konfiguration oder stelle ein zuvor erstelltes Backup wieder her. Wähle eine Aktion aus und speichere die Einstellungen. Öffne die Einstellungen anschließend erneut, um den Download- bzw. Upload-Link zu erhalten.",
@@ -100,12 +99,11 @@
   "en": {
     "group.general.name":          "General",
     "group.general.description":   "General Plugin Settings",
-    "group.discovery.auto.name":          "Add Devices Automatically",
-    "group.discovery.auto.description":   "Recommended: Search for Nanoleaf devices on the network. Put your devices into pairing mode before starting so they can be added automatically.",
     "group.discovery.manual.name":        "Add Devices Manually",
     "group.discovery.manual.description": "Fallback: If the automatic search does not find your device, you can add it here using its IP address.",
     "group.device.description":    "Nanoleaf Device (Model: {model})",
     "group.pending.description":   "Device discovered on the LAN (IP: {ip}). Enter the auth token and enable the checkbox to add it.",
+    "group.pending.inactive":      "(inactive)",
 
     "group.backup_restore.name":        "Backup & Restore",
     "group.backup_restore.description": "Create a backup of your plugin configuration or restore a previously created backup. Select an action and save the settings. Then reopen the settings to get the download or upload link.",

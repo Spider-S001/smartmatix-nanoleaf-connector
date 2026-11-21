@@ -727,17 +727,19 @@ class Plugin {
    * @returns {object} Gruppenobjekt
    */
   _generateSettingsGroups(nanoleafDevices) {
+    // Tab-Reihenfolge (order):
+    //   1       Allgemein (inkl. automatischer Gerätesuche)
+    //   2       Backup & Wiederherstellung
+    //   3       Geräte manuell hinzufügen
+    //   10+     eingerichtete Nanoleaf-Geräte
+    //   100+    entdeckte, noch nicht hinzugefügte Geräte – Titel mit "(inaktiv)"
+    //   999     Informationen zum Plugin
     const lang   = this._lang;
     const groups = {
       general: {
         friendlyName: t(lang, 'group.general.name'),
         description:  t(lang, 'group.general.description'),
         order:        1,
-      },
-      discovery_auto: {
-        friendlyName: t(lang, 'group.discovery.auto.name'),
-        description:  t(lang, 'group.discovery.auto.description'),
-        order:        2,
       },
       discovery_manual: {
         friendlyName: t(lang, 'group.discovery.manual.name'),
@@ -760,7 +762,8 @@ class Plugin {
     this._pendingDiscovery.forEach((candidate, i) => {
       const num = i + 1;
       groups[`pending_${num}`] = {
-        friendlyName: candidate.name ?? `Nanoleaf @ ${candidate.ip}`,
+        // "(inaktiv)" im Titel: Gerät wurde gefunden, ist aber noch nicht hinzugefügt
+        friendlyName: `${candidate.name ?? `Nanoleaf @ ${candidate.ip}`} ${t(lang, 'group.pending.inactive')}`,
         description:  t(lang, 'group.pending.description').replace('{ip}', candidate.ip),
         order:        100 + i,
       };
@@ -800,7 +803,7 @@ class Plugin {
     groups.backup_restore = {
       friendlyName: t(lang, 'group.backup_restore.name'),
       description:  combinedDesc,
-      order:        997,
+      order:        2,   // direkt hinter "Allgemein"
     };
 
     // --- Plugin-Infos ---
@@ -833,7 +836,7 @@ class Plugin {
         description:  t(lang, 'settings.reinclude.description'),
         dataType:     'BOOLEAN',
         groupId:      'general',
-        order:        1,
+        order:        2,
         defaultValue: false,
         currentValue: this._config.reincludeDevices ?? false,
       },
@@ -843,7 +846,7 @@ class Plugin {
         description:  t(lang, 'settings.pollinterval.description'),
         dataType:     'ENUM',
         groupId:      'general',
-        order:        2,
+        order:        3,
         defaultValue: t(lang, 'settings.pollinterval.60s'),
         currentValue: t(lang, `settings.pollinterval.${this._pollIntervalKey()}`),
         values: [
@@ -857,14 +860,14 @@ class Plugin {
         ],
       },
 
-      // --- Tab "Geräte automatisch hinzufügen" ---
+      // --- Automatische Gerätesuche (im Tab "Allgemein", an erster Stelle) ---
       scanNow: {
         friendlyName: this._formatScanCountdown(lang),
         description:  this._isScanning
           ? t(lang, 'settings.scan.description.running')
           : t(lang, 'settings.scan.description'),
         dataType:     'BOOLEAN',
-        groupId:      'discovery_auto',
+        groupId:      'general',
         order:        1,
         defaultValue: false,
         currentValue: false,

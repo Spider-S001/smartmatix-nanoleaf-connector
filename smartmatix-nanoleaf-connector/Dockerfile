@@ -34,7 +34,7 @@ LABEL de.eq3.hmip.plugin.metadata='\
 {\
   "pluginId": "de.smartmatix.plugin.nanoleaf-connector",\
   "issuer": "Kevin Schipper",\
-  "version": "1.0.3",\
+  "version": "1.0.4",\
   "hcuMinVersion": "1.7.9",\
   "scope": "LOCAL",\
   "settings": [],\
